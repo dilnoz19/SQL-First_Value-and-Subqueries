@@ -1,0 +1,377 @@
+--First_value function
+
+SELECT 
+SalesOrderID,
+SalesOrderDetailID,
+LineTotal,
+Ranking = ROW_NUMBER() OVER(PARTITION BY SalesOrderID ORDER BY LineTotal DESC),
+HighestTotal = FIRST_VALUE(LineTotal) OVER(PARTITION BY SalesOrderID ORDER BY LineTotal DESC), 
+LowestTotal = FIRST_VALUE(LineTotal) OVER(PARTITION BY SalesOrderID ORDER BY LineTotal)
+FROM AdventureWorks2019.Sales.SalesOrderDetail
+ORDER BY SalesOrderID, LineTotal DESC;
+
+SELECT
+    CustomerID,
+    OrderDate,
+    TotalDue,
+    FirstOrderAmnt = FIRST_VALUE(TotalDue) OVER(PARTITION BY CustomerID ORDER BY OrderDate DESC)
+FROM AdventureWorks2019.Sales.SalesOrderHeader
+
+ORDER BY CustomerID, OrderDate
+
+--Exercise 1 
+SELECT
+    EmployeeID = BusinessEntityID, 
+    JobTitle,
+    HireDate,
+    VacationHours,
+    FirstHireVacationHours = FIRST_VALUE(VacationHours) OVER(PARTITION BY JobTitle ORDER BY HireDate)
+FROM AdventureWorks2019.HumanResources.Employee
+ORDER BY JobTitle, HireDate
+
+--Exercise 2
+SELECT
+    P.ProductID,
+    ProductName = P.Name,
+    H.ListPrice,
+    H.ModifiedDate,
+    HighestPrice = FIRST_VALUE(H.ListPrice) OVER(PARTITION BY P.ProductID ORDER BY H.ListPrice DESC),
+    LowestPrice = FIRST_VALUE(H.ListPrice) OVER(PARTITION BY P.ProductID ORDER BY H.ListPrice),
+    PriceRange = FIRST_VALUE(H.ListPrice) OVER(PARTITION BY P.ProductID ORDER BY H.ListPrice DESC) -
+		FIRST_VALUE(H.ListPrice) OVER(PARTITION BY P.ProductID ORDER BY H.ListPrice)
+FROM AdventureWorks2019.Production.Product AS P
+INNER JOIN AdventureWorks2019.Production.ProductListPriceHistory AS H 
+ON P.ProductID = H.ProductID
+ORDER BY P.ProductID, H.ModifiedDate
+
+--Subqueries
+SELECT
+*
+FROM
+
+(
+    SELECT 
+    SalesOrderID,
+    SalesOrderDetailID,
+    LineTotal,
+    LineTotalRanking = ROW_NUMBER() OVER(PARTITION BY SalesOrderID ORDER BY LineTotal DESC)
+    FROM AdventureWorks2019.Sales.SalesOrderDetail
+) A 
+WHERE LineTotalRanking = 1
+
+--Exercise 1
+
+SELECT
+    PurchaseOrderID,
+    VendorID,
+    OrderDate,
+    TaxAmt,
+    Freight, 
+    TotalDue,
+    --The next TotalDueRank column can be added or not. I added so I know I selected top 3 ranks
+    TotalDueRank = ROW_NUMBER() Over(PARTITION BY VendorID ORDER BY TotalDue DESC)
+ FROM 
+(SELECT
+    PurchaseOrderID,
+    VendorID,
+    OrderDate,
+    TaxAmt,
+    Freight, 
+    TotalDue,
+    TotalDueRank = ROW_NUMBER() Over(PARTITION BY VendorID ORDER BY TotalDue DESC)
+FROM AdventureWorks2019.Purchasing.PurchaseOrderHeader) A 
+WHERE TotalDueRank <=3
+
+--Exercise 2
+SELECT
+    PurchaseOrderID,
+    VendorID,
+    OrderDate,
+    TaxAmt,
+    Freight, 
+    TotalDue,
+    TotalDueRank = DENSE_RANK() Over(PARTITION BY VendorID ORDER BY TotalDue DESC)
+ FROM 
+(SELECT
+    PurchaseOrderID,
+    VendorID,
+    OrderDate,
+    TaxAmt,
+    Freight, 
+    TotalDue,
+    TotalDueRank = DENSE_RANK() Over(PARTITION BY VendorID ORDER BY TotalDue DESC)
+FROM AdventureWorks2019.Purchasing.PurchaseOrderHeader) A 
+WHERE TotalDueRank <=3
+
+--Rows Between ROLLING 3 DAY TOTAL
+
+SELECT
+    OrderDate,
+    TotalDue,
+    SalesLast3Days = SUM(TotalDue) OVER(ORDER BY OrderDate ROWS BETWEEN 2 Preceding AND CURRENT ROW)
+FROM (
+    SELECT 
+        OrderDate,
+        TotalDue = SUM(TotalDue)
+    FROM
+        AdventureWorks2019.Sales.SalesOrderHeader
+    WHERE YEAR(OrderDate) =2014
+    GROUP BY OrderDate) X 
+
+ORDER BY OrderDate 
+
+
+SELECT
+    OrderDate,
+    TotalDue,
+    SalesLast3Days = SUM(TotalDue) OVER(ORDER BY OrderDate ROWS BETWEEN 3 Preceding AND 1 PRECEDING)
+FROM (
+    SELECT 
+        OrderDate,
+        TotalDue = SUM(TotalDue)
+    FROM
+        AdventureWorks2019.Sales.SalesOrderHeader
+    WHERE YEAR(OrderDate) =2014
+    GROUP BY OrderDate) X 
+
+ORDER BY OrderDate 
+
+--Rolling 3 day total, spanning previous and following row
+SELECT
+    OrderDate,
+    TotalDue,
+    SalesLast3Days = SUM(TotalDue) OVER(ORDER BY OrderDate ROWS BETWEEN 1 Preceding AND 1 FOLLOWING)
+FROM (
+    SELECT 
+        OrderDate,
+        TotalDue = SUM(TotalDue)
+    FROM
+        AdventureWorks2019.Sales.SalesOrderHeader
+    WHERE YEAR(OrderDate) =2014
+    GROUP BY OrderDate) X 
+
+ORDER BY OrderDate 
+
+--Rolling 3 day average - aka a "moving" average
+
+SELECT
+    OrderDate,
+    TotalDue,
+    SalesLast3Days = AVG(TotalDue) OVER(ORDER BY OrderDate ROWS BETWEEN 2 Preceding AND CURRENT ROW)
+FROM (
+    SELECT 
+        OrderDate,
+        TotalDue = SUM(TotalDue)
+    FROM
+        AdventureWorks2019.Sales.SalesOrderHeader
+    WHERE YEAR(OrderDate) =2014
+    GROUP BY OrderDate) X 
+
+ORDER BY OrderDate 
+
+--Rows between exercises 1
+SELECT 
+    OrderMonth = MONTH(OrderDate),
+    OrderYear = YEAR(OrderDate),
+    SUM(SubTotal)
+FROM
+    AdventureWorks2019.Purchasing.PurchaseOrderHeader
+GROUP BY MONTH(OrderDate),YEAR(OrderDate)
+
+--Exercise 2
+SELECT
+    OrderMonth,
+    OrderYear,
+    SubTotal,
+    Rolling3MonthTotal = SUM(SubTotal) OVER(ORDER BY OrderYear, OrderMonth  ROWS BETWEEN 2 Preceding AND CURRENT ROW),
+    MovingAvg6Month =  AVG(SubTotal) OVER(ORDER BY OrderYear, OrderMonth  ROWS BETWEEN 6 Preceding AND 1 PRECEDING),
+    MovingAvgNext2Months = AVG(SubTotal) OVER(ORDER BY OrderYear, OrderMonth ROWS BETWEEN CURRENT ROW AND 2 FOLLOWING)
+FROM
+(
+    SELECT 
+    OrderMonth = MONTH(OrderDate),
+    OrderYear = YEAR(OrderDate),
+    SubTotal = SUM(SubTotal)
+FROM
+    AdventureWorks2019.Purchasing.PurchaseOrderHeader
+GROUP BY MONTH(OrderDate),YEAR(OrderDate)) X  
+
+--Scalar Subqueries
+SELECT 
+    ProductID,
+    Name, 
+    StandardCost,
+    ListPrice,
+    AvgListPrice = (SELECT AVG(ListPrice) FROM AdventureWorks2019.Production.Product)
+    FROM AdventureWorks2019.Production.Product
+
+WHERE ListPrice > (SELECT AVG(ListPrice) FROM AdventureWorks2019.Production.Product)
+
+ORDER BY ListPrice
+
+--Exercises 1
+SELECT 
+    BusinessEntityID,
+    JobTitle, 
+    VacationHours,
+    MaxVacationHours = (SELECT MAX(VacationHours) FROM AdventureWorks2019.HumanResources.Employee)
+    FROM AdventureWorks2019.HumanResources.Employee
+
+--Exercise 2
+SELECT 
+    BusinessEntityID,
+    JobTitle, 
+    VacationHours,
+    MaxVacationHours = (SELECT MAX(VacationHours) FROM AdventureWorks2019.HumanResources.Employee),
+    PercentOfMaxVacationHours = (VacationHours/(SELECT MAX(VacationHours) FROM AdventureWorks2019.HumanResources.Employee))*1.0
+    FROM AdventureWorks2019.HumanResources.Employee
+ 
+ --Exercise 3
+SELECT 
+    BusinessEntityID,
+    JobTitle, 
+    VacationHours,
+    MaxVacationHours = (SELECT MAX(VacationHours) FROM AdventureWorks2019.HumanResources.Employee),
+    PercentOfMaxVacationHours = VacationHours*1.0/(SELECT MAX(VacationHours) FROM AdventureWorks2019.HumanResources.Employee)
+    FROM AdventureWorks2019.HumanResources.Employee
+
+WHERE VacationHours*1.0/(SELECT MAX(VacationHours) FROM AdventureWorks2019.HumanResources.Employee) >= 0.8
+
+--Correlated Subqueries
+SELECT
+    SalesOrderID,
+    OrderDate,
+    SubTotal,
+    TaxAmt,
+    Freight,
+    TotalDue,
+    MultiOrderCount = 
+    (
+    SELECT 
+    COUNT(*)
+    FROM AdventureWorks2019.Sales.SalesOrderDetail B 
+    WHERE A.SalesOrderID = B.SalesOrderID
+    AND OrderQty > 1
+    )
+
+FROM AdventureWorks2019.Sales.SalesOrderHeader A 
+
+-- SELECT 
+-- SalesOrderID,
+-- OrderQty
+-- FROM AdventureWorks2019.Sales.SalesOrderDetail
+-- WHERE SalesOrderID = 43660
+
+--Exercise 1
+SELECT 
+    PurchaseOrderID,
+    VendorID,
+    OrderDate,
+    TotalDue,
+    NonRejectedItems = 
+    (
+        SELECT COUNT(*) FROM AdventureWorks2019.Purchasing.PurchaseOrderDetail A 
+        WHERE A.PurchaseOrderID = B.PurchaseOrderID 
+        AND A.RejectedQty = 0 
+    )
+    FROM AdventureWorks2019.Purchasing.PurchaseOrderHeader  B 
+
+
+ SELECT 
+    PurchaseOrderID,
+    RejectedQty
+FROM AdventureWorks2019.Purchasing.PurchaseOrderDetail  
+WHERE PurchaseOrderID = 12
+
+--Exercise 2
+SELECT 
+    PurchaseOrderID,
+    VendorID,
+    OrderDate,
+    TotalDue,
+    NonRejectedItems = 
+    (
+        SELECT COUNT(*) FROM AdventureWorks2019.Purchasing.PurchaseOrderDetail A 
+        WHERE A.PurchaseOrderID = B.PurchaseOrderID 
+        AND A.RejectedQty = 0 
+    ),
+    MostExpensiveItem = (
+        SELECT
+            MAX(UnitPrice)
+        FROM AdventureWorks2019.Purchasing.PurchaseOrderDetail A
+        WHERE A.PurchaseOrderID = B.PurchaseOrderID
+    )
+    FROM AdventureWorks2019.Purchasing.PurchaseOrderHeader  B 
+
+--Exists
+SELECT * FROM AdventureWorks2019.Sales.SalesOrderHeader WHERE SalesOrderID = 43683
+
+SELECT * FROM AdventureWorks2019.Sales.SalesOrderDetail WHERE SalesOrderID = 43683
+
+--Using Exists to pick only the records we need
+SELECT
+    A.SalesOrderID,
+    A.OrderDate,
+    A.TotalDue
+
+FROM AdventureWorks2019.Sales.SalesOrderHeader A 
+WHERE NOT EXISTS (
+    SELECT 
+        1 --can type anything
+    FROM AdventureWorks2019.Sales.SalesOrderDetail B
+    WHERE B.LineTotal > 10000
+    AND A.SalesOrderID = B.SalesOrderID
+)
+ORDER BY 1
+
+--Exercise 1
+SELECT
+    PurchaseOrderID,
+    OrderDate,
+    SubTotal,
+    TaxAmt
+FROM AdventureWorks2019.Purchasing.PurchaseOrderHeader A 
+WHERE Exists (
+    SELECT
+    PurchaseOrderID,
+    OrderQty
+    FROM AdventureWorks2019.Purchasing.PurchaseOrderDetail B
+    WHERE OrderQty > 500
+    AND A.PurchaseOrderID = B.PurchaseOrderID
+)
+ORDER BY 1
+
+--Exercise 2
+SELECT
+    A.*
+FROM AdventureWorks2019.Purchasing.PurchaseOrderHeader A 
+WHERE Exists (
+    SELECT
+     1
+    FROM AdventureWorks2019.Purchasing.PurchaseOrderDetail B
+    WHERE B.OrderQty > 500
+    AND A.PurchaseOrderID = B.PurchaseOrderID
+    AND B.UnitPrice > 50
+)
+ORDER BY 1
+
+--Exercise 3 
+SELECT
+    A.*
+FROM AdventureWorks2019.Purchasing.PurchaseOrderHeader A 
+WHERE EXISTS (
+    SELECT
+     1
+    FROM AdventureWorks2019.Purchasing.PurchaseOrderDetail B
+    WHERE B.RejectedQty < 1 
+    AND A.PurchaseOrderID = B.PurchaseOrderID
+)
+ORDER BY 1
+
+SELECT
+ PurchaseOrderID,
+ OrderQty,
+ RejectedQty
+FROM AdventureWorks2019.Purchasing.PurchaseOrderDetail
+WHERE PurchaseOrderID = 5
+ORDER BY 1
